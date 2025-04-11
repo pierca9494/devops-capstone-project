@@ -61,14 +61,14 @@ def create_accounts():
 # LIST ALL ACCOUNTS
 ######################################################################
 
-# ... place you code here to LIST accounts ...
-@app.route("/accounts/<int:account_id>", methods=["GET"])
-def get_account(account_id):
-    """Read an Account by ID"""
-    account = Account.find(account_id)
-    if not account:
-        abort(404, f"Account with id [{account_id}] could not be found.")
-    return account.serialize(), 200
+# # ... place you code here to LIST accounts ...
+# @app.route("/accounts/<int:account_id>", methods=["GET"])
+# def get_account(account_id):
+#     """Read an Account by ID"""
+#     account = Account.find(account_id)
+#     if not account:
+#         abort(404, f"Account with id [{account_id}] could not be found.")
+#     return account.serialize(), 200
 
 
 

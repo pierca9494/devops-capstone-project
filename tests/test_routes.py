@@ -12,6 +12,11 @@ from tests.factories import AccountFactory
 from service.common import status  # HTTP Status Codes
 from service.models import db, Account, init_db
 from service.routes import app
+from service import talisman
+
+
+HTTPS_ENVIRON = {'wsgi.url_scheme': 'https'}
+
 
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql://postgres:postgres@localhost:5432/postgres"
@@ -34,6 +39,7 @@ class TestAccountService(TestCase):
         app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URI
         app.logger.setLevel(logging.CRITICAL)
         init_db(app)
+        talisman.force_https = False
 
     @classmethod
     def tearDownClass(cls):
@@ -126,55 +132,66 @@ class TestAccountService(TestCase):
     # ADD YOUR TEST CASES HERE ...
 
     def test_get_account(self):
-    """It should Read a single Account"""
-    account = self._create_accounts(1)[0]  # Helper function to create a test account
-    resp = self.client.get(f"/accounts/{account.id}", content_type="application/json")
-    self.assertEqual(resp.status_code, 200)
-    data = resp.get_json()
-    self.assertEqual(data["name"], account.name)
+        """It should Read a single Account"""
+        account = self._create_accounts(1)[0]  # Helper function to create a test account
+        resp = self.client.get(f"/accounts/{account.id}", content_type="application/json")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(data["name"], account.name)
 
     def test_get_account_list(self):
-    """It should Get a list of Accounts"""
-    self._create_accounts(5)  # Helper function to create 5 test accounts
-    resp = self.client.get(BASE_URL)  # Make GET request to the list endpoint
-    self.assertEqual(resp.status_code, status.HTTP_200_OK)
-    data = resp.get_json()  # Parse JSON response
-    self.assertEqual(len(data), 5)  # Check that 5 accounts are returned
+        """It should Get a list of Accounts"""
+        self._create_accounts(5)  # Helper function to create 5 test accounts
+        resp = self.client.get(BASE_URL)  # Make GET request to the list endpoint
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        data = resp.get_json()  # Parse JSON response
+        self.assertEqual(len(data), 5)  # Check that 5 accounts are returned
 
-    
-    
-   def test_update_account(self):
-    """It should Update an existing Account"""
-    # Create an account to update
-    test_account = AccountFactory()
-    resp = self.client.post(BASE_URL, json=test_account.serialize())
-    self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-    
-    # Update the account
-    new_account = resp.get_json()
-    new_account["name"] = "Something Known"
-    resp = self.client.put(f"{BASE_URL}/{new_account['id']}", json=new_account)
-    
-    # Assert update was successful
-    self.assertEqual(resp.status_code, status.HTTP_200_OK)
-    updated_account = resp.get_json()
-    self.assertEqual(updated_account["name"], "Something Known")
+    def test_update_account(self):
+        """It should Update an existing Account"""
+        # Create an account to update
+        test_account = AccountFactory()
+        resp = self.client.post(BASE_URL, json=test_account.serialize())
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        # Update the account
+        new_account = resp.get_json()
+        new_account["name"] = "Something Known"
+        resp = self.client.put(f"{BASE_URL}/{new_account['id']}", json=new_account)
+
+        # Assert update was successful
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        updated_account = resp.get_json()
+        self.assertEqual(updated_account["name"], "Something Known")
 
     def test_delete_account(self):
-    """It should Delete an Account"""
-    account = self._create_accounts(1)[0]  # Create an account to delete
-    resp = self.client.delete(f"{BASE_URL}/{account.id}")  # DELETE request for the account
-    self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)  # Ensure no content returned
-
+        """It should Delete an Account"""
+        account = self._create_accounts(1)[0]  # Create an account to delete
+        resp = self.client.delete(f"{BASE_URL}/{account.id}")  # DELETE request for the account
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)  # Ensure no content returned
 
     def test_method_not_allowed(self):
-    """It should not allow an illegal method call"""
-    resp = self.client.delete(BASE_URL)  # DELETE on a route that doesn't support DELETE
-    self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)  # Should return 405
+        """It should not allow an illegal method call"""
+        resp = self.client.delete(BASE_URL)  # DELETE on a route that doesn't support DELETE
+        self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)  # Should return 405
+
+    def test_security_headers(self):
+        """It should return security headers"""
+        response = self.client.get('/', environ_overrides=HTTPS_ENVIRON)
+        self.assertEqual(response.status_code, 200)
+        headers = {
+            'X-Frame-Options': 'SAMEORIGIN',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': "default-src 'self'; object-src 'none'",
+            'Referrer-Policy': 'strict-origin-when-cross-origin'
+        }
+        for key, value in headers.items():
+            self.assertEqual(response.headers.get(key), value)
 
 
-
-
-
-
-
+    def test_cors_security(self):
+    """It should return a CORS header"""
+    response = self.client.get('/', environ_overrides=HTTPS_ENVIRON)
+    self.assertEqual(response.status_code, status.HTTP_200_OK)
+    # Check for the CORS header
+    self.assertEqual(response.headers.get('Access-Control-Allow-Origin'), '*')
